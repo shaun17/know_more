@@ -21,8 +21,7 @@ public class SWHashMap<K, V> implements Map<K, V> {
 	static final int UNTREEIFY_THRESHOLD = 6; // 当链表长度小于6 将转为链表结构
 	static final int MIN_TREEIFY_CAPACITY = 64; // 当链表转换为tree之前，进行一次判断，判断
 												// 键值对的数量查过64将链表进行转换为tree，因为避免hash运算的不合理分布导致大连数据都落在一条链上
-	// 基本的hash桶，用于组成链表
-
+	// 基本的node 节点，用于组成链表
 	static class Node<K, V> implements Map.Entry<K, V> {
 		final int hash;// hash值
 		final K key;
@@ -130,17 +129,17 @@ public class SWHashMap<K, V> implements Map<K, V> {
 		return (n < 0) ? 1 : (n >= MAXIMUM_CAPACITY) ? MAXIMUM_CAPACITY : n + 1;
 	}
 
-	// 为桶的长度，每次扩容即2倍
+	// 数组的长度，每次扩容即2倍，通过上面方法扩容
 	transient Node<K, V>[] table;
 	// 存放map的entrySet for keySet and values
 	transient Set<Map.Entry<K, V>> entrySet;
 	// map的size
 	transient int size;
-	// 下次扩容的大小 capacity*loadFactor
+	// 扩容的阈值 capacity*loadFactor
 	int threshold;
 	// 自定义的负载因数
 	final float loadFactor;
-	/**
+	/**此HashMap在结构上被修改的次数
 	 * The number of times this HashMap has been structurally modified Structural
 	 * modifications are those that change the number of mappings in the HashMap or
 	 * otherwise modify its internal structure (e.g., rehash). This field is used to
@@ -160,8 +159,8 @@ public class SWHashMap<K, V> implements Map<K, V> {
 			throw new IllegalArgumentException("Illegal load factor: " + loadFactor);
 		// 自定义负载因数
 		this.loadFactor = loadFactor;
-		// 扩容后大小
-		this.threshold = tableSizeFor(initialCapacity);
+		// 扩容阈值
+		this.threshold = tableSizeFor(initialCapacity);//返回和原数组相同的长度
 	}
 
 	// 自定义初始化大小
@@ -222,9 +221,12 @@ public class SWHashMap<K, V> implements Map<K, V> {
 		Node<K, V> first, e;
 		int n;
 		K k;
+		//1.将现有的table数组赋给tab 2.确保数组长度>0 3.通过hash计算得到该节点在数组中存储的位置
 		if ((tab = table) != null && (n = tab.length) > 0 && (first = tab[n - 1 & hash]) != null)
+			//如果相等则返回该node节点
 			if (first.hash == hash && ((k = first.key) == key || (key != null && key.equals(k))))
 				return first;
+		//当不是第一个node，往下遍历
 		if ((e = first.next) != null) {
 			if (first instanceof TreeNode) {
 				return ((TreeNode<K, V>) first).getTreeNode(hash, key);
@@ -253,59 +255,56 @@ public class SWHashMap<K, V> implements Map<K, V> {
 		int n, i;
 		if ((tab = table) == null || (n = tab.length) == 0)// 若数组为null，重置长度
 			n = (tab = resize()).length;
-		if ((p = tab[i = (n - 1) & hash]) == null)// 位置刚还为null 将Node创建直接放在该位置
-			tab[i] = newNode(hash, key, value, null);
+		if ((p = tab[i = (n - 1) & hash]) == null)//计算节点存储位置 (length-1) & hash 将存在的node赋给p
+			tab[i] = newNode(hash, key, value, null);//若该位置为null，直接将该node放在此位置
 		else {// 该位置有元素
 			Node<K, V> e;
 			K k;
 			if (p.hash == hash && ((k = p.key) == key || (key != null && key.equals(k))))
-				//如果key相等，直接将新的node将老的替换
-				e = p;
+				e = p;//如果key相等，直接将新的node将老的替换
 			else if (p instanceof TreeNode)//若为树结构
                 e = ((TreeNode<K,V>)p).putTreeVal(this, tab, hash, key, value);
 			else {
 				for (int binCount = 0; ; ++binCount) {//遍历链上的数据
-					if((e = p.next)==null) {
+					if((e = p.next) == null) {
 						p.next= newNode(hash, key, value, null);//若节点next为null，接在后面
-						if(binCount >= TREEIFY_THRESHOLD - 1)
-							treeifyBin(tab, hash);
+						if(binCount >= TREEIFY_THRESHOLD - 1)//若链表长度大于链表的阈值，转换为树形结构
+							treeifyBin(tab, hash);//转换为树形结构
 	                    break;
 					}
-					if(e.hash ==hash && ((k = e.key) == key || (key != null && key.equals(k)))))
+					if(e.hash == hash && ((k = e.key) == key || (key != null && key.equals(k))))//找到相同key的node
 						break;
 					p=e;//都不满足 则继续往遍历，next一直往下
 				}
 			}
-			if(e != null) { // existing mapping for key
+			if(e != null) { // existing mapping for key 链表中含有相同key的节点
 				V oldValue = e.value;
-                if (!onlyIfAbsent || oldValue == null)
+                if (!onlyIfAbsent || oldValue == null)//当旧值不为空的情况下，将新值覆盖旧值
                     e.value = value;
                 afterNodeAccess(e);
                 return oldValue;
 			}
 		}
-		++modCount;//增加修改次数
+		++modCount;//增加 HashMap在结构上被修改的次数
 		if (++size > threshold)//当大于阈值 重置大小
             resize();
 		afterNodeInsertion(evict);
         return null;
 	}
 
-	// 重置数组大小
+	//数组扩容
 	final Node<K, V>[] resize() {
 		Node<K, V>[] oldTab = table;
-		int oldCap = (oldTab == null) ? 0 : oldTab.length;// 旧容量
-		int oldThr = threshold;// 旧的扩容阈值
+		int oldCap = (oldTab == null) ? 0 : oldTab.length;// 旧数组容量
+		int oldThr = threshold;// 旧的数组扩容阈值
 		int newCap, newThr;
 		if (oldCap > 0) {
 			// 当就数组的长度大于最大值，无法扩容，返回旧数组
 			if (oldCap >= MAXIMUM_CAPACITY) {
 				threshold = Integer.MAX_VALUE;
 				return oldTab;
-
 			} else if ((newCap = oldCap << 1) < MAXIMUM_CAPACITY && oldCap >= DEFAULT_INITIAL_CAPACITY)
-				// newCap扩容为oldCap的2倍<<1
-				newThr = oldThr << 1; // 阈值一倍
+				newThr = oldThr << 1; // 阈值翻倍  newCap扩容为oldCap的2倍<<1
 		} else if (oldThr > 0) {
 			newCap = oldThr;// 设置初始化扩容阈值
 		} else { // 当初始阈值为0 使用默认值
@@ -317,7 +316,7 @@ public class SWHashMap<K, V> implements Map<K, V> {
 			newThr = (newCap < MAXIMUM_CAPACITY && ft < (float) MAXIMUM_CAPACITY ? (int) ft : Integer.MAX_VALUE);
 		}
 
-		threshold = newThr;
+		threshold = newThr; //确定了扩容后的阈值
 		@SuppressWarnings({ "rawtypes", "unchecked" })
 		// 此时newCap已经是扩容2倍后当大小，此时重新计算hash分布node
 		Node<K, V>[] newTab = (Node<K, V>[]) new Node[newCap];
@@ -329,7 +328,9 @@ public class SWHashMap<K, V> implements Map<K, V> {
 					if (e.next == null) {// 如果该节点为最后一个节点
 						newTab[e.hash & (newCap - 1)] = e;// 使用hash值与容量长度-1 确定节点新位置
 					} else if (e instanceof TreeNode) // 如果是tree结构
-						((TreeNode<K, V>) e).split(this, newTab, j, oldCap);
+						((TreeNode<K, V>) e).split(this, newTab, j, oldCap);//判断树长度是否长于6
+																	//（tree转会链表的阈值），否则转为链表，
+																	//扩容的时候，将一条链表的节点分成两个，然后判断长短是不是转为tree
 					else {
 						Node<K, V> loHead = null, loTail = null;
 						Node<K, V> hiHead = null, hiTail = null;
@@ -418,7 +419,7 @@ public class SWHashMap<K, V> implements Map<K, V> {
 	 * Entry for Tree bins. Extends LinkedHashMap.Entry (which in turn extends Node)
 	 * so can be used as extension of either regular or linked node.
 	 */
-	static final class TreeNode<K, V> extends LinkedHashMap.Entry<K, V> {
+	static final class TreeNode<K, V> extends SWLinkedHashMap.Entry<K, V> {
 		TreeNode<K, V> parent; // red-black tree links
 		TreeNode<K, V> left;
 		TreeNode<K, V> right;
