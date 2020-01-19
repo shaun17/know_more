@@ -9,10 +9,10 @@ public class Send {
 
 	public static void main(String[] args) {
 		ConnectionFactory cf = new ConnectionFactory();
-		cf.setHost("localhost");
+		cf.setHost("47.113.102.247");
 		try (Connection connection = cf.newConnection(); Channel channel = connection.createChannel()) {
 			channel.queueDeclare(QUEUE_NAME, false, false, false, null);
-			String message = "hello 123";
+			String message = "hello world";
 			channel.basicPublish("", QUEUE_NAME, null, message.getBytes());
 			System.out.println(" [x] Sent '" + message + "'");
 		} catch (Exception e) {

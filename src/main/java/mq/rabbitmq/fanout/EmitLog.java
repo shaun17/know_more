@@ -1,4 +1,4 @@
-package mq.rabbitmq.publishandsub;
+package mq.rabbitmq.fanout;
 
 import java.util.Scanner;
 
@@ -11,7 +11,7 @@ public class EmitLog {
 
 	public static void main(String[] args) throws Exception {
 		ConnectionFactory cf = new ConnectionFactory();
-		cf.setHost("localhose");
+		cf.setHost("47.113.102.247");
 		try (Connection connection = cf.newConnection(); Channel channel = connection.createChannel()) {
 			channel.exchangeDeclare(EXCHANGE, "fanout");
 			Scanner s = new Scanner(System.in);

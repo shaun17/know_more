@@ -1,4 +1,4 @@
-package mq.rabbitmq.publishandsub;
+package mq.rabbitmq.fanout;
 
 import java.io.IOException;
 import java.util.concurrent.TimeoutException;
@@ -14,7 +14,7 @@ public class ReceiveLogs {
 
 	public static void main(String[] args) throws IOException, TimeoutException {
 		ConnectionFactory cf = new ConnectionFactory();
-		cf.setHost("localhost");
+		cf.setHost("47.113.102.247");
 		Connection newConnection = cf.newConnection();
 		Channel createChannel = newConnection.createChannel();
 

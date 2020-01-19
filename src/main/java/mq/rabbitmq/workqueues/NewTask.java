@@ -13,10 +13,10 @@ public class NewTask {
 
 	public static void main(String[] args) throws IOException, TimeoutException {
 		ConnectionFactory cf = new ConnectionFactory();
-		cf.setHost("localhost");
+		cf.setHost("47.113.102.247");
 		try (Connection newConnection = cf.newConnection(); Channel channel = newConnection.createChannel()) {
-			channel.queueDeclare(QUEUE_NAME, false, false, false, null);// 消息持久化
-			String message = String.join(" ", "this is message");
+			channel.queueDeclare(QUEUE_NAME, true, false, false, null);// 消息持久化
+			String message = String.join(" ", "this is work message");
 			channel.basicPublish("", QUEUE_NAME, MessageProperties.PERSISTENT_TEXT_PLAIN, message.getBytes("UTF-8")); //消息持久化
 		} catch (Exception e) {
 		}

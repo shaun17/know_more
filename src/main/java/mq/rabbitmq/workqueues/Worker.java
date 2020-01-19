@@ -14,29 +14,33 @@ public class Worker {
 
 	public static void main(String[] args) throws IOException, TimeoutException {
 		ConnectionFactory cf = new ConnectionFactory();
-		cf.setHost("localhost");
+		cf.setHost("47.113.102.247");
 		Connection connection = cf.newConnection();
 		Channel channel = connection.createChannel();
-		channel.queueDeclare(QUEUE_NAME, false, false, false, null); //持久化
+		channel.queueDeclare(QUEUE_NAME, true, false, false, null); // 持久化
 		System.out.println(" [*] Waiting for messages. To exit press CTRL+C");
-		channel.basicQos(1);//一个消费者一次值分一个消息
-		DeliverCallback callback = ( consumerTag,  delivery)->{
-			String message = new String(delivery.getBody(),"utf-8");
-	        System.out.println(" [x] Received '" + message + "'");
-	        try {
-	            doWork(message);
-	          } catch (InterruptedException e) {
+		channel.basicQos(1);// 一个消费者一次值分一个消息
+		DeliverCallback callback = (consumerTag, delivery) -> {
+			String message = new String(delivery.getBody(), "utf-8");
+			System.out.println(" [x] Received '" + message + "'");
+			try {
+				doWork(message);
+			} catch (InterruptedException e) {
 				e.printStackTrace();
 			} finally {
-	            System.out.println(" [x] Done");
-	          }
-		};
-		//hannel.basicConsume(QUEUE_NAME, true, callback, consumerTag->{}); 关闭自动校验，消费者消费消息，给exchange返回ack，
-		//然后exchange就可以删除消息，如果由于消费者没有返回ack，则exchange会将消息再转发
-		//boolean aotoACK = false;
+				System.out.println(" [x] Done");
+				channel.basicAck(delivery.getEnvelope().getDeliveryTag(), false);
 
-		channel.basicConsume(QUEUE_NAME, false, callback, consumerTag->{});
-		
+			}
+		};
+		// hannel.basicConsume(QUEUE_NAME, true, callback, consumerTag->{});
+		// 关闭自动校验，消费者消费消息，给exchange返回ack，
+		// 然后exchange就可以删除消息，如果由于消费者没有返回ack，则exchange会将消息再转发
+		// boolean aotoACK = false;
+
+		channel.basicConsume(QUEUE_NAME, false, callback, consumerTag -> {
+		});
+
 	}
 
 	private static void doWork(String task) throws InterruptedException {

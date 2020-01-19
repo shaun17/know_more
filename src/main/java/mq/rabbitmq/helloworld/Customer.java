@@ -14,7 +14,7 @@ public class Customer {
 
 	public static void main(String[] args) throws IOException, TimeoutException {
 		ConnectionFactory cf = new ConnectionFactory();
-		cf.setHost("localhost");
+		cf.setHost("47.113.102.247");
 		Connection newConnection = cf.newConnection();
 		Channel createChannel = newConnection.createChannel();
 		createChannel.queueDeclare(QUEUE_NAME, false, false, false, null);
