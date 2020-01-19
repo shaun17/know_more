@@ -1,4 +1,4 @@
-package base;
+package base.thread;
 
 public enum Emun {
 	SUCCESS(200, "成功"), FAILED(500, "失败");
