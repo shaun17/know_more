@@ -20,15 +20,15 @@ public class SWConcurrentHashMap<K, V> extends AbstractMap<K, V> implements Conc
 	private static final int DEFAULT_CAPACITY = 16;// 默认table大小
 	private static final int MAX_ARRAY_SIZE = Integer.MAX_VALUE - 8;// 数组的最大可能值，需要与toArray()相关方法关联
 	private static final int DEFAULT_CONCURRENCY_LEVEL = 16;// 默认的并发级别，为了兼容以前版本遗留下来的
-	private static final float LOAD_FACTOR = 0.75f;// 负载因数
-	static final int TREEIFY_THRESHOLD = 8;// 链表转化tree阈值
+	private static final float LOAD_FACTOR = 0.75f;//负载因子
+	static final int TREEIFY_THRESHOLD = 8;// 链表转化tree阈值，因为泊松分布，单个hash槽个数为8的概率小于百万分之1
 	static final int UNTREEIFY_THRESHOLD = 6;// tree转化链表阈值
 	static final int MIN_TREEIFY_CAPACITY = 64;// 最小转化为tree节点阈值
 	private static final int MIN_TRANSFER_STRIDE = 16;// 每个转换的最小步数
 	private static int RESIZE_STAMP_BITS = 16;// 用于在sizeCtl中生成分段的位数，32bit的数组至少为6
 	private static final int MAX_RESIZERS = (1 << (32 - RESIZE_STAMP_BITS)) - 1;// help resize的最大线程数
 	private static final int RESIZE_STAMP_SHIFT = 32 - RESIZE_STAMP_BITS;// sizeCtl中记录size的偏移量，默认为32-16=16
-	static final int MOVED = -1;// forwarding nodes的hash值
+	static final int MOVED = -1;// forwarding nodes的hash值 用于存储nextTable的引用，当table扩容的时候才会发生作用，作为一个占位符放在table中表示当前节点为null或则已经被移动。
 	static final int TREEBIN = -2;// 红黑树的根节点hash值
 	static final int RESERVED = -3;// reservation node的hash值
 	static final int HASH_BITS = 0x7fffffff; // 普通节点的散列位
@@ -39,12 +39,15 @@ public class SWConcurrentHashMap<K, V> extends AbstractMap<K, V> implements Conc
 
 	private transient volatile long baseCount;// 在没有竞争使用，通过CAS操作更新
 	/**
-	 * 控制标识符，用来控制table的初始化和扩容的操作，不同的值有不同的含义 当为负数时：-1代表正在初始化，-N代表有N-1个线程正在 进行扩容
-	 * 当为0时，代表当时的table还没有被初始化 当为正数时：表示初始化或下一次进行扩容的大小
+	 * 控制标识符，用来控制table的初始化和扩容的操作，不同的值有不同的含义 当为负数时：
+	 * -1代表正在初始化，
+	 * -N代表有N-1个线程正在 进行扩容
+	 * 当为0时，代表当时的table还没有被初始化 
+	 * 当为正数时：表示初始化或下一次进行扩容的大小
 	 */
 	private transient volatile int sizeCtl;
 
-	private transient volatile Node<K, V>[] nextTable;
+	private transient volatile Node<K, V>[] nextTable; //默认为null，扩容时新生成的数组，其大小为原数组的两倍。
 
 	private transient volatile int transferIndex;// 备用数据
 
@@ -71,6 +74,7 @@ public class SWConcurrentHashMap<K, V> extends AbstractMap<K, V> implements Conc
 	/**
 	 * Returns a power of two table size for the given desired capacity. See Hackers
 	 * Delight, sec 3.2
+	 * 数组扩容
 	 */
 	private static final int tableSizeFor(int c) {
 		int n = c - 1;
@@ -85,6 +89,7 @@ public class SWConcurrentHashMap<K, V> extends AbstractMap<K, V> implements Conc
 	/**
 	 * Returns x's Class if it is of the form "class C implements Comparable<C>",
 	 * else null.
+	 * 
 	 */
 	static Class<?> comparableClassFor(Object x) {
 		if (x instanceof Comparable) {
@@ -171,7 +176,42 @@ public class SWConcurrentHashMap<K, V> extends AbstractMap<K, V> implements Conc
 			return null;
 		}
 	}
+	/**
+     * A node inserted at head of bins during transfer operations.
+     */
+    static final class ForwardingNode<K,V> extends Node<K,V> {
+        final Node<K,V>[] nextTable;
+        ForwardingNode(Node<K,V>[] tab) {
+            super(MOVED, null, null, null);
+            this.nextTable = tab;
+        }
 
+        Node<K,V> find(int h, Object k) {
+            // loop to avoid arbitrarily deep recursion on forwarding nodes
+            outer: for (Node<K,V>[] tab = nextTable;;) {
+                Node<K,V> e; int n;
+                if (k == null || tab == null || (n = tab.length) == 0 ||
+                    (e = tabAt(tab, (n - 1) & h)) == null)
+                    return null;
+                for (;;) {
+                    int eh; K ek;
+                    if ((eh = e.hash) == h &&
+                        ((ek = e.key) == k || (ek != null && k.equals(ek))))
+                        return e;
+                    if (eh < 0) {
+                        if (e instanceof ForwardingNode) {
+                            tab = ((ForwardingNode<K,V>)e).nextTable;
+                            continue outer;
+                        }
+                        else
+                            return e.find(h, k);
+                    }
+                    if ((e = e.next) == null)
+                        return null;
+                }
+            }
+        }
+    }
 	static final class TreeNode<K, V> extends Node<K, V> {// 红黑树
 		TreeNode<K, V> parent;
 		TreeNode<K, V> left;
@@ -319,6 +359,19 @@ public class SWConcurrentHashMap<K, V> extends AbstractMap<K, V> implements Conc
 			}
 		}
 		return tab;
+	}
+
+	@SuppressWarnings("unchecked")
+	static final <K, V> Node<K, V> tabAt(Node<K, V>[] tab, int i) {
+		return (Node<K, V>) U.getObjectVolatile(tab, ((long) i << ASHIFT) + ABASE);
+	}
+
+	static final <K, V> boolean casTabAt(Node<K, V>[] tab, int i, Node<K, V> c, Node<K, V> v) {
+		return U.compareAndSwapObject(tab, ((long) i << ASHIFT) + ABASE, c, v);
+	}
+
+	static final <K, V> void setTabAt(Node<K, V>[] tab, int i, Node<K, V> v) {
+		U.putObjectVolatile(tab, ((long) i << ASHIFT) + ABASE, v);
 	}
 
 	/**
